@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <classpath>
-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8">
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER">
 		<attributes>
 			<attribute name="module" value="true"/>
 		</attributes>
-		<accessrules>
-			<accessrule kind="accessible" pattern="javafx/**"/>
-		</accessrules>
 	</classpathentry>
-	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/5"/>
+	<classpathentry kind="lib" path="/Users/kjetildyrland/Downloads/javax.activation-1.2.0.jar"/>
+	<classpathentry kind="lib" path="/Users/kjetildyrland/Downloads/jaxb-impl-2.3.0.jar"/>
+	<classpathentry kind="lib" path="/Users/kjetildyrland/Downloads/jaxb-core-2.3.0.jar"/>
+	<classpathentry kind="lib" path="/Users/kjetildyrland/Downloads/jaxb-api-2.3.0.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -24,6 +25,7 @@ import no.hvl.dat110.node.Message;
 import no.hvl.dat110.node.Node;
 import no.hvl.dat110.node.OperationType;
 import no.hvl.dat110.node.Operations;
+import no.hvl.dat110.rpc.StaticTracker;
 import no.hvl.dat110.rpc.interfaces.ChordNodeInterface;
 import no.hvl.dat110.util.Hash;
 import no.hvl.dat110.util.Util;
@@ -119,113 +121,127 @@ public class FileManager extends Thread {
 	
 	public boolean requestToReadFileFromAnyActiveNode(String filename) throws RemoteException, NotBoundException {
 		
-		// get all the activenodes that have the file (replicas) i.e. requestActiveNodesForFile(String filename)
-		Set<Message> activeNodes = requestActiveNodesForFile(filename);
+		// get all the activenodes that have the file (replicas) i.e.
+				// requestActiveNodesForFile(String filename)
+				Set<Message> activeNodeMessages = requestActiveNodesForFile(filename);
+				List<Message> activeNodes = new ArrayList<Message>(activeNodeMessages);
 
-		// choose any available node
-		List<Message> messages = new ArrayList<>(activeNodes);
-		Message activeMessage = messages.get(0);
+				// choose any available node
+				Message nodeMessage = activeNodes.get(0);
 
-		// locate the registry and see if the node is still active by retrieving its remote object
-		ChordNodeInterface activeNode = (ChordNodeInterface) Util.locateRegistry(activeMessage.getNodeIP()).lookup(activeMessage.getNodeID().toString());
+				// locate the registry and see if the node is still active by retrieving its
+				// remote object
+				Registry reg = LocateRegistry.getRegistry(StaticTracker.PORT);
+				ChordNodeInterface node = (ChordNodeInterface) reg.lookup(nodeMessage.getNodeID().toString());
 
-		int i = 1;
-		while(activeNode == null) {
-			activeMessage = messages.get(i);
-			activeNode = (ChordNodeInterface) Util.locateRegistry(activeMessage.getNodeIP()).lookup(activeMessage.getNodeID().toString());
-			i++;
-		}
-		// build the operation to be performed - Read and request for votes in existing active node message
-		activeMessage.setOptype(OperationType.READ);
-		Operations op = new Operations(activeNode,activeMessage,activeNodes);
+				// build the operation to be performed - Read and request for votes in existing
+				// active node message
+				Boolean request = node.requestReadOperation(nodeMessage);
 
+				// set the active nodes holding replica files in the contact node
+				// (setActiveNodesForFile)
+				node.setActiveNodesForFile(activeNodeMessages);
 
-		// set the active nodes holding replica files in the contact node (setActiveNodesForFile)
- 		activeNode.setActiveNodesForFile(activeNodes);
+				// set the NodeIP in the message (replace ip with )
+				nodeMessage.setNodeIP(node.getNodeIP());
+				nodeMessage.setOptype(OperationType.READ);
 
-		// set the NodeIP in the message (replace ip with )
-		activeMessage.setNodeIP(this.chordnode.getNodeIP());
-		
-		// send a request to a node and get the voters decision
-		boolean voted = activeNode.requestReadOperation(activeMessage);
+				// send a request to a node and get the voters decision
+				// put the decision back in the message
+				nodeMessage.setAcknowledged(request);
 
-		// put the decision back in the message
-		activeMessage.setAcknowledged(voted);
+				// multicast voters' decision to the rest of the nodes
+				node.multicastVotersDecision(nodeMessage);
 
-		// multicast voters' decision to the rest of the nodes
-		activeNode.multicastVotersDecision(activeMessage);
+				// if majority votes
+				if (request) {
+					// acquire lock to CS and also increments localclock
+					node.acquireLock();
 
-		// if majority votes
-		if(voted) {
-			// acquire lock to CS and also increments localclock
-			activeNode.acquireLock();
-			// perform operation by calling Operations class
-			op.performOperation();
-			// optional: retrieve content of file on local resource
-			// send message to let replicas release read lock they are holding
-			op.multicastReadReleaseLocks();
-			// release locks after operations
-			activeNode.releaseLocks();
-			return true;
-		}
-			
-		return false;		// change to your final answer
+					// perform operation by calling Operations class
+					Operations op = new Operations(node, nodeMessage, activeNodeMessages);
+					op.performOperation();
+
+					// optional: retrieve content of file on local resource
+
+					// send message to let replicas release read lock they are holding
+					node.multicastUpdateOrReadReleaseLockOperation(nodeMessage);
+
+					try {
+						sleep(3000);
+					} catch (InterruptedException ex) {
+						ex.printStackTrace();
+					}
+
+					// release locks after operations
+					node.releaseLocks();
+				}
+
+				return request;		// change to your final answer
 	}
 	
 	public boolean requestWriteToFileFromAnyActiveNode(String filename, String newcontent) throws RemoteException, NotBoundException {
 		
-		// get all the activenodes that have the file (replicas) i.e. requestActiveNodesForFile(String filename)
-		Set<Message> replicas = requestActiveNodesForFile(filename);
+
+		// get all the activenodes that have the file (replicas) i.e.
+		// requestActiveNodesForFile(String filename)
+		Set<Message> activeNodeMessages = requestActiveNodesForFile(filename);
+		List<Message> activeNodes = new ArrayList<Message>(activeNodeMessages);
 
 		// choose any available node
-		List<Message> messages = new ArrayList<>(replicas);
-		Message activeMessage = messages.get(0);
-		
-		// locate the registry and see if the node is still active by retrieving its remote object
-		ChordNodeInterface activeNode = (ChordNodeInterface) Util.locateRegistry(activeMessage.getNodeIP()).lookup(activeMessage.getNodeID().toString());
+		Message nodeMessage = activeNodes.get(0);
 
-		int i = 1;
-		while(activeNode == null) {
-			activeMessage = messages.get(i);
-			activeNode = (ChordNodeInterface) Util.locateRegistry(activeMessage.getNodeIP()).lookup(activeMessage.getNodeID().toString());
-			i++;
-		}
+		// locate the registry and see if the node is still active by retrieving its
+		// remote object
+		Registry reg = LocateRegistry.getRegistry(StaticTracker.PORT);
+		ChordNodeInterface node = (ChordNodeInterface) reg.lookup(nodeMessage.getNodeID().toString());
 
+		// build the operation to be performed - Read and request for votes in existing
+		// active node message
+		Boolean request = node.requestWriteOperation(nodeMessage);
 
-		// build the operation to be performed - Read and request for votes in existing active node message
-		activeMessage.setOptype(OperationType.WRITE);
-
-		// set the active nodes holding replica files in the contact node (setActiveNodesForFile)
-		activeNode.setActiveNodesForFile(replicas);
+		// set the active nodes holding replica files in the contact node
+		// (setActiveNodesForFile)
+		node.setActiveNodesForFile(activeNodeMessages);
 
 		// set the NodeIP in the message (replace ip with )
-		activeMessage.setNodeIP(this.chordnode.getNodeIP());
-		
-		// send a request to a node and get the voters decision
-		boolean voted = activeNode.requestWriteOperation(activeMessage);
+		nodeMessage.setNodeIP(node.getNodeIP());
+		nodeMessage.setNewcontent(newcontent);
+		nodeMessage.setOptype(OperationType.WRITE);
 
+		// send a request to a node and get the voters decision
 		// put the decision back in the message
-		activeMessage.setAcknowledged(voted);
+		nodeMessage.setAcknowledged(request);
 
 		// multicast voters' decision to the rest of the nodes
-		activeNode.multicastVotersDecision(activeMessage);
+		node.multicastVotersDecision(nodeMessage);
 
 		// if majority votes
-		if(voted) {
-			Operations op = new Operations(activeNode,activeMessage,replicas);
-			// acquire lock to CS and also increments localclock
-			activeNode.acquireLock();
-			// perform operation by calling Operations class
+		if (request) {
+			node.acquireLock();
+			Operations op = new Operations(node, nodeMessage, activeNodeMessages);
 			op.performOperation();
-			// update replicas and let replicas release CS lock they are holding
-			op.multicastOperationToReplicas(activeMessage);
-			op.multicastReadReleaseLocks();
-			// release locks after operations
-			activeNode.releaseLocks();
-			return true;
+
+			node.multicastUpdateOrReadReleaseLockOperation(nodeMessage);
+
+			try {
+				sleep(2000);
+			} catch (InterruptedException ex) {
+				ex.printStackTrace();
+			}
+
+			node.releaseLocks();
 		}
 
-		return false;
+		// acquire lock to CS and also increments localclock
+
+		// perform operation by calling Operations class
+
+		// update replicas and let replicas release CS lock they are holding
+
+		// release locks after operations
+
+		return request; // change to your final answer
 
 	}
 

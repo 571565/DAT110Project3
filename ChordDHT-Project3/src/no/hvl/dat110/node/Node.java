@@ -14,6 +14,7 @@ import no.hvl.dat110.util.Util;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.rmi.AccessException;
 import java.rmi.NotBoundException;
@@ -53,7 +54,7 @@ public class Node extends UnicastRemoteObject implements ChordNodeInterface {
 
         fingerTable = new ArrayList<ChordNodeInterface>();
         fileKey = new HashSet<BigInteger>();
-        // setNodeIP(InetAddress.getLocalHost().getHostAddress());	// use the IP address of the host
+        //setNodeIP(InetAddress.getLocalHost().getHostAddress());	// use the IP address of the host
         setNodeIP(nodename);                                        // use a different name as "IP" for single machine simulation
         BigInteger hashvalue = Hash.hashOf(getNodeIP());            // use the SHA-1  from Hash class
         setNodeID(hashvalue);
@@ -407,9 +408,11 @@ public class Node extends UnicastRemoteObject implements ChordNodeInterface {
         // check the operation type: we expect a WRITE operation to do this.
         // perform operation by using the Operations class
         // Release locks after this operation
+    	if (message.getOptype().equals(no.hvl.dat110.node.OperationType.WRITE)) {
         Operations op = new Operations(this,message,activenodesforfile);
         op.performOperation();
         releaseLocks();
+    	}
     }
 
     @Override

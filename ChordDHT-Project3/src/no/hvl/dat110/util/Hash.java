@@ -15,6 +15,10 @@ import java.security.NoSuchAlgorithmException;
 
 import javax.xml.bind.DatatypeConverter;
 
+
+
+
+
 public class Hash {
 	
 	public static int mbit = 4;			// using SHA-1 compresses/hashes to 160bits	
